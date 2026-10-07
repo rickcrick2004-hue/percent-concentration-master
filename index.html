@@ -4,19 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>パーセント濃度マスター</title>
-    <!-- Tailwind CSSの読み込み -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React, ReactDOM, Babelの読み込み -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        /* タッチデバイスでのハイライトを消すための基本設定 */
         body {
             -webkit-tap-highlight-color: transparent;
             font-family: 'Inter', sans-serif;
         }
-        /* スクロールバーの非表示（見た目をスッキリさせるため） */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -32,8 +28,6 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- 問題データベース ---
-        // ※後から問題を追加・修正する場合は、この配列を編集してください。
         const PROBLEMS_DB = {
             1: [
                 { text: "食塩水100gに、食塩が5gとけています。この食塩水の質量パーセント濃度は何％ですか。", solute: 5, solvent: 95, solution: 100, percent: 5, provided: ['solution', 'solute'] },
@@ -85,24 +79,59 @@
             ]
         };
 
-        // メインコンポーネント
-        function MassPercentApp() {
+        // ====== 共通UIコンポーネント ======
+        
+        function TopBar({ onBackToStart }) {
+            return (
+                <div className="p-3 md:p-5 bg-sky-600 text-white flex justify-between items-center rounded-t-2xl md:rounded-t-none md:rounded-tl-2xl">
+                    <h1 className="text-lg md:text-xl font-bold tracking-wider">パーセント濃度マスター</h1>
+                    <button onClick={onBackToStart} className="text-sm bg-white text-sky-600 px-3 py-1 rounded-full font-bold hover:bg-sky-50">
+                        スタートへ戻る
+                    </button>
+                </div>
+            );
+        }
+
+        function Explanation({ data, level }) {
+            // 解説ロジック
+            let exp = "";
+            if (level === 1) {
+                if (data.provided.includes('solvent')) {
+                    exp = `式：${data.solute} ÷ (${data.solvent} + ${data.solute}) × 100`;
+                } else {
+                    exp = `式：${data.solute} ÷ ${data.solution} × 100`;
+                }
+            } else if (level === 2) {
+                 exp = `全体の${data.solution}gの${data.percent}％分なので、${data.solution} × ${data.percent / 100} を計算します。`;
+            } else if (level === 3) {
+                 exp = `${data.percent}％分が${data.solute}gなので、1％分は ${data.solute / data.percent}g です。全体(100％)はそれを100倍して求めます。`;
+            } else if (level === 4) {
+                 const tenPercentAmount = data.percent === 10 ? data.solute : (data.percent === 20 ? data.solute / 2 : data.solute / 3);
+                 const total = data.solution;
+                 exp = `${data.percent}%が${data.solute}gなら全体は${total}gです。水は全体から溶質を引いて ${total} - ${data.solute} = ${data.solvent}g になります。`;
+            }
+            return (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+                    <h4 className="font-bold text-yellow-800 mb-2">考え方</h4>
+                    <p className="text-gray-700">{exp}</p>
+                </div>
+            )
+        }
+
+        // ====== モード1: 図で考える (VisualMode) ======
+
+        function VisualMode({ onBackToStart }) {
             const [level, setLevel] = useState(1);
             const [problemIndex, setProblemIndex] = useState(0);
             const [isCorrect, setIsCorrect] = useState(false);
             const [problemData, setProblemData] = useState(null);
             
-            // ブロックと図の状態
             const [availableBlocks, setAvailableBlocks] = useState([]);
             const [diagram, setDiagram] = useState({ percent: null, solute: null, solvent: null, solution: null });
             
-            // カスタムブロック入力用
             const [customInputValue, setCustomInputValue] = useState('');
-            
-            // UI操作状態（タップ対応用）
             const [selectedBlockId, setSelectedBlockId] = useState(null);
             
-            // 最終解答とフィードバック
             const [userXValue, setUserXValue] = useState('');
             const [feedback, setFeedback] = useState(null);
 
@@ -113,19 +142,10 @@
                 let expected = { percent: data.percent, solute: data.solute, solvent: data.solvent, solution: data.solution };
                 let correctX = 0;
 
-                if (level === 1) { // ％を求める
-                    expected.percent = 'x';
-                    correctX = data.percent;
-                } else if (level === 2) { // 溶質を求める
-                    expected.solute = 'x';
-                    correctX = data.solute;
-                } else if (level === 3) { // 溶液を求める
-                    expected.solution = 'x';
-                    correctX = data.solution;
-                } else if (level === 4) { // 溶媒を求める（最難関）
-                    expected.solvent = 'x';
-                    correctX = data.solvent;
-                }
+                if (level === 1) { expected.percent = 'x'; correctX = data.percent; } 
+                else if (level === 2) { expected.solute = 'x'; correctX = data.solute; } 
+                else if (level === 3) { expected.solution = 'x'; correctX = data.solution; } 
+                else if (level === 4) { expected.solvent = 'x'; correctX = data.solvent; }
 
                 const initialBlocks = data.provided.map((key, index) => ({
                     id: `b_${key}_${Date.now()}_${index}`, value: data[key], type: 'number'
@@ -141,12 +161,10 @@
                 setIsCorrect(false);
             };
 
-            // 初回マウント時とレベル・問題変更時に問題を生成
             useEffect(() => {
                 generateProblem();
             }, [level, problemIndex]);
 
-            // 自分で数値を計算して新しいブロックを作る
             const handleCreateBlock = () => {
                 const val = parseInt(customInputValue, 10);
                 if (!isNaN(val)) {
@@ -156,47 +174,32 @@
                 }
             };
 
-            // PC用ドラッグ開始
             const handleDragStart = (e, blockId) => {
                 e.dataTransfer.setData('blockId', blockId);
                 setSelectedBlockId(blockId);
             };
 
-            const handleDragOver = (e) => {
-                e.preventDefault();
-            };
+            const handleDragOver = (e) => { e.preventDefault(); };
 
-            // 図の枠へのドロップ（またはタップでの配置）処理
             const handleDropToDiagram = (e, zoneKey, fromTapId = null) => {
                 e?.preventDefault();
+                if (isCorrect) return;
+                
                 const blockId = fromTapId || (e?.dataTransfer ? e.dataTransfer.getData('blockId') : null);
                 if (!blockId) return;
 
-                // ブロックがどこにあるか探す（availableBlocks か diagramの中）
                 let blockToMove = availableBlocks.find(b => b.id === blockId);
                 let sourceZone = null;
 
                 if (!blockToMove) {
                     for (const [key, b] of Object.entries(diagram)) {
-                        if (b && b.id === blockId) {
-                            blockToMove = b;
-                            sourceZone = key;
-                            break;
-                        }
+                        if (b && b.id === blockId) { blockToMove = b; sourceZone = key; break; }
                     }
                 }
 
                 if (blockToMove) {
-                    // 既にその枠にあるブロックは元に戻す
                     const existingBlock = diagram[zoneKey];
-                    
-                    setDiagram(prev => ({
-                        ...prev,
-                        [sourceZone]: null, // 元の場所を空にする
-                        [zoneKey]: blockToMove // 新しい場所に置く
-                    }));
-
-                    // プールの更新
+                    setDiagram(prev => ({ ...prev, [sourceZone]: null, [zoneKey]: blockToMove }));
                     let newAvailable = availableBlocks.filter(b => b.id !== blockId);
                     if (existingBlock) newAvailable.push(existingBlock);
                     setAvailableBlocks(newAvailable);
@@ -204,8 +207,8 @@
                 setSelectedBlockId(null);
             };
 
-            // 図からブロックを外す（タップして元に戻す）
             const handleRemoveFromDiagram = (zoneKey) => {
+                if (isCorrect) return;
                 const block = diagram[zoneKey];
                 if (block) {
                     setAvailableBlocks([...availableBlocks, block]);
@@ -214,25 +217,20 @@
                 }
             };
 
-            // 枠がタップされた時の処理（選択済みブロックがあれば配置、なければ外す）
             const handleZoneClick = (zoneKey) => {
-                if (selectedBlockId) {
-                    handleDropToDiagram(null, zoneKey, selectedBlockId);
-                } else if (diagram[zoneKey]) {
-                    handleRemoveFromDiagram(zoneKey);
-                }
+                if (isCorrect) return;
+                if (selectedBlockId) handleDropToDiagram(null, zoneKey, selectedBlockId);
+                else if (diagram[zoneKey]) handleRemoveFromDiagram(zoneKey);
             };
 
             const checkAnswer = () => {
                 if (!problemData) return;
                 
-                // 1. 図が全て埋まっているかチェック
                 if (!diagram.percent || !diagram.solute || !diagram.solvent || !diagram.solution) {
                     setFeedback({ type: 'error', message: 'まずは図の4つの枠をすべてブロックで埋めよう！足りない数字は計算して作ってね。' });
                     return;
                 }
 
-                // 2. 図の配置が正しいかチェック
                 const isDiagramCorrect = 
                     diagram.percent.value === problemData.expected.percent &&
                     diagram.solute.value === problemData.expected.solute &&
@@ -244,98 +242,65 @@
                     return;
                 }
 
-                // 3. 答えが入力されているか
                 if (userXValue === '') {
                      setFeedback({ type: 'error', message: '図は合っているよ！最後に下の枠に計算した答えを入力してね。' });
                      return;
                 }
 
-                // 4. xの値が正しいかチェック
                 if (parseInt(userXValue, 10) === problemData.correctX) {
                     setFeedback({ type: 'success', message: '大正解！図の意味も計算も完璧に理解できているね！' });
                     setIsCorrect(true);
                 } else {
-                    setFeedback({ type: 'error', message: '図は合っているよ！でも最後の「x」の計算が惜しい。方程式を見直してみよう。' });
+                    setFeedback({ type: 'error', message: '図は合っているよ！でも最後の計算が惜しい。方程式を見直してみよう。' });
                 }
             };
 
             return (
-                <div className="p-4 md:p-6 w-full max-w-6xl mx-auto flex flex-col md:flex-row gap-6 h-auto md:h-[95vh]">
-                    
-                    {/* 左側：問題とブロックエリア */}
+                <div className="w-full max-w-6xl mx-auto flex flex-col md:flex-row gap-6 md:mt-4 items-stretch">
                     <div className="w-full md:w-1/2 flex flex-col bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
-                        <div className="p-5 bg-sky-600 text-white flex justify-between items-center">
-                            <h1 className="text-xl font-bold tracking-wider">パーセント濃度マスター</h1>
-                        </div>
-                        
-                        <div className="p-5 flex flex-col flex-grow">
-                            {/* レベル選択タブ */}
-                            <div className="flex space-x-2 mb-6 overflow-x-auto no-scrollbar pb-2 px-1">
+                        <TopBar onBackToStart={onBackToStart} />
+                        <div className="p-4 md:p-5 flex flex-col flex-grow">
+                            <div className="flex space-x-2 mb-4 overflow-x-auto no-scrollbar pb-2 px-1">
                                 {[1, 2, 3, 4].map(l => (
-                                    <button 
-                                        key={l}
-                                        onClick={() => {
-                                            setLevel(l);
-                                            setProblemIndex(0);
-                                        }}
-                                        className={`px-3 py-2 md:px-4 md:py-2 text-sm md:text-base rounded-xl font-bold whitespace-nowrap transition-all duration-200 ${level === l ? 'bg-orange-500 text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                                    >
+                                    <button key={l} onClick={() => { setLevel(l); setProblemIndex(0); }}
+                                        className={`px-3 py-2 text-sm md:text-base rounded-xl font-bold whitespace-nowrap transition-colors duration-200 ${level === l ? 'bg-orange-500 text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                                         レベル {l}
                                     </button>
                                 ))}
                             </div>
 
-                            {/* 問題文 */}
-                            <div className="bg-sky-50 p-5 rounded-2xl mb-6 shadow-inner border border-sky-100">
-                                <div className="text-sky-600 font-bold mb-2 text-sm md:text-base">レベル {level} - {problemIndex + 1}問目 / 10問</div>
-                                <div className="text-lg md:text-xl font-medium leading-relaxed text-gray-800">
+                            <div className="bg-sky-50 p-4 rounded-2xl mb-4 shadow-inner border border-sky-100">
+                                <div className="text-sky-600 font-bold mb-1 text-sm">レベル {level} - {problemIndex + 1}問目 / 10問</div>
+                                <div className="text-base md:text-lg font-medium leading-relaxed text-gray-800">
                                     {problemData?.text}
                                 </div>
                             </div>
 
                             <div className="flex-grow flex flex-col">
-                                <h2 className="text-lg font-bold text-gray-700 mb-2 flex items-center gap-2">
-                                    <svg className="w-5 h-5 text-sky-500" fill="currentColor" viewBox="0 0 20 20"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
-                                    使えるブロック
-                                </h2>
-                                <p className="text-sm text-gray-500 mb-3">ブロックをタップして選んでから、右の図の枠をタップして当てはめよう。</p>
+                                <h2 className="text-base font-bold text-gray-700 mb-1 flex items-center gap-2">使えるブロック</h2>
+                                <p className="text-xs md:text-sm text-gray-500 mb-2">ブロックをタップして選んでから、右の図の枠をタップして当てはめよう。</p>
                                 
-                                {/* ブロックプール */}
-                                <div className="flex flex-wrap gap-3 mb-6 min-h-[80px] p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                                <div className="flex flex-wrap gap-2 mb-4 min-h-[70px] p-3 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
                                     {availableBlocks.map(block => (
-                                        <div
-                                            key={block.id}
-                                            draggable
-                                            onDragStart={(e) => handleDragStart(e, block.id)}
-                                            onClick={() => setSelectedBlockId(block.id === selectedBlockId ? null : block.id)}
-                                            className={`w-14 h-14 md:w-16 md:h-16 flex items-center justify-center rounded-xl shadow-md cursor-pointer text-xl font-bold transition-all duration-200 select-none
+                                        <div key={block.id} draggable={!isCorrect} onDragStart={(e) => handleDragStart(e, block.id)} onClick={() => !isCorrect && setSelectedBlockId(block.id === selectedBlockId ? null : block.id)}
+                                            className={`w-12 h-12 md:w-14 md:h-14 flex items-center justify-center rounded-xl shadow-md cursor-pointer text-lg font-bold transition-all duration-200 select-none
                                                 ${block.type === 'x' ? 'bg-yellow-300 text-yellow-800 border-2 border-yellow-400' : 'bg-white border-2 border-sky-400 text-sky-700'}
                                                 ${selectedBlockId === block.id ? 'ring-4 ring-orange-400 scale-110 shadow-lg transform -translate-y-1' : 'hover:bg-sky-50'}
-                                            `}
-                                        >
+                                                ${isCorrect ? 'opacity-50 cursor-not-allowed' : ''}
+                                            `}>
                                             {block.value}
                                         </div>
                                     ))}
-                                    {availableBlocks.length === 0 && <span className="text-gray-400 m-auto text-sm">全て図に配置されています</span>}
+                                    {availableBlocks.length === 0 && <span className="text-gray-400 m-auto text-xs md:text-sm">全て図に配置されています</span>}
                                 </div>
 
-                                {/* オリジナルブロック作成 */}
-                                <div className="mt-auto p-5 bg-orange-50 rounded-2xl border border-orange-200">
-                                    <h3 className="text-sm font-bold text-orange-800 mb-3">💡 足りない数字は自分で計算して作ろう！</h3>
-                                    <div className="flex items-center gap-3">
-                                        <input 
-                                            type="number" 
-                                            value={customInputValue}
-                                            onChange={(e) => setCustomInputValue(e.target.value)}
-                                            placeholder="数字を入力..."
-                                            // 横幅を広げ、プレースホルダーが途切れないように調整
-                                            className="w-40 md:w-48 px-4 py-3 border-2 border-orange-300 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200 text-lg transition-all"
-                                        />
-                                        <button 
-                                            onClick={handleCreateBlock}
-                                            disabled={!customInputValue}
-                                            className="flex-grow px-4 py-3 bg-orange-500 text-white font-bold rounded-xl shadow-md hover:bg-orange-600 disabled:opacity-50 transition-colors"
-                                        >
+                                <div className="mt-auto p-4 bg-orange-50 rounded-2xl border border-orange-200">
+                                    <h3 className="text-xs md:text-sm font-bold text-orange-800 mb-2">💡 足りない数字は自分で計算して作ろう！</h3>
+                                    <div className="flex items-center gap-2">
+                                        <input type="number" value={customInputValue} onChange={(e) => setCustomInputValue(e.target.value)} disabled={isCorrect} placeholder="数字を入力..."
+                                            className="w-32 md:w-40 px-3 py-2 border-2 border-orange-300 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200 text-base transition-all disabled:bg-gray-200" />
+                                        <button onClick={handleCreateBlock} disabled={!customInputValue || isCorrect}
+                                            className="flex-grow px-3 py-2 bg-orange-500 text-white font-bold rounded-xl shadow-md hover:bg-orange-600 disabled:opacity-50 transition-colors text-sm md:text-base">
                                             ブロックを作る
                                         </button>
                                     </div>
@@ -344,151 +309,105 @@
                         </div>
                     </div>
 
-                    {}
                     <div className="w-full md:w-1/2 flex flex-col gap-4">
-                        
-                        {/* ビーカー図エリア */}
-                        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 flex-grow flex flex-col items-center justify-center p-4 md:p-6 min-h-[300px] md:min-h-[350px]">
-                            
-                            <div className="flex flex-col items-center w-full max-w-sm relative">
-                                
-                                {/* 1. パーセント (上部) */}
-                                <div className="mb-2 md:mb-3 flex flex-col items-center">
-                                    <div 
-                                        onDragOver={handleDragOver}
-                                        onDrop={(e) => handleDropToDiagram(e, 'percent')}
-                                        onClick={() => handleZoneClick('percent')}
-                                        className={`w-16 h-12 md:w-20 md:h-14 rounded-xl border-4 flex items-center justify-center text-lg md:text-xl font-bold cursor-pointer transition-all duration-300 relative
+                        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 flex-grow flex flex-col items-center justify-center p-4 min-h-[280px]">
+                            <div className="flex flex-col items-center w-full max-w-xs relative">
+                                {/* 1. パーセント (Blue) */}
+                                <div className="mb-2 flex flex-col items-center">
+                                    <div onDragOver={handleDragOver} onDrop={(e) => handleDropToDiagram(e, 'percent')} onClick={() => handleZoneClick('percent')}
+                                        className={`w-12 h-10 md:w-14 md:h-12 rounded-xl border-4 flex items-center justify-center text-sm md:text-base font-bold cursor-pointer transition-all duration-300 relative
                                             ${selectedBlockId && !diagram.percent ? 'ring-4 ring-orange-300 ring-opacity-50 animate-pulse' : ''}
-                                            ${diagram.percent ? (diagram.percent.type === 'x' ? 'bg-yellow-300 border-yellow-400 text-yellow-800' : 'bg-white border-sky-400 text-sky-700 shadow-md') : 'border-dashed border-gray-300 bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
-                                    >
-                                        {diagram.percent ? diagram.percent.value : <span className="text-sm md:text-base">％</span>}
+                                            ${diagram.percent ? (diagram.percent.type === 'x' ? 'bg-yellow-300 border-yellow-400 text-yellow-800' : 'bg-blue-50 border-blue-400 text-blue-700 shadow-md') : 'border-dashed border-blue-300 bg-white text-blue-400 hover:bg-blue-50'}
+                                            ${isCorrect && diagram.percent.type !== 'x' ? 'opacity-80' : ''}`}>
+                                        {diagram.percent ? diagram.percent.value : <span className="text-[10px]">％</span>}
                                     </div>
                                 </div>
 
-                                {/* 2. ビーカー本体 (中央) */}
-                                {/* 線の被りを防ぐため、高さを固定しoverflowを利用 */}
-                                <div className="relative w-48 h-40 md:w-56 md:h-48 border-l-4 border-r-4 border-b-4 border-slate-700 rounded-b-3xl overflow-hidden flex flex-col justify-end shadow-inner bg-white">
-                                    
-                                    {/* 液体部分 (溶媒エリア) */}
-                                    <div className="w-full h-[75%] bg-sky-200/50 border-t-2 border-sky-300 relative flex items-center justify-center">
-                                        
-                                        {/* 溶媒の枠 (液体の右下付近) */}
-                                        <div 
-                                            onDragOver={handleDragOver}
-                                            onDrop={(e) => handleDropToDiagram(e, 'solvent')}
-                                            onClick={() => handleZoneClick('solvent')}
-                                            className={`absolute bottom-2 right-2 w-14 h-14 md:w-16 md:h-16 rounded-xl border-4 flex flex-col items-center justify-center font-bold cursor-pointer transition-all z-10
+                                {/* 2. ビーカー本体 */}
+                                <div className="relative w-40 h-32 md:w-44 md:h-36 border-l-4 border-r-4 border-b-4 border-slate-700 rounded-b-3xl overflow-hidden flex flex-col justify-end shadow-inner bg-white mx-auto">
+                                    <div className="w-full h-[75%] bg-sky-100 border-t-2 border-sky-300 relative flex items-center justify-center">
+                                        {/* 溶媒 (Violet) */}
+                                        <div onDragOver={handleDragOver} onDrop={(e) => handleDropToDiagram(e, 'solvent')} onClick={() => handleZoneClick('solvent')}
+                                            className={`absolute bottom-1 right-1 w-11 h-11 md:w-12 md:h-12 rounded-xl border-4 flex flex-col items-center justify-center font-bold cursor-pointer transition-all z-10
                                                 ${selectedBlockId && !diagram.solvent ? 'ring-4 ring-orange-300 ring-opacity-50 animate-pulse' : ''}
-                                                ${diagram.solvent ? (diagram.solvent.type === 'x' ? 'bg-yellow-300 border-yellow-400 text-yellow-800 text-lg md:text-xl' : 'bg-white border-sky-400 text-sky-700 text-lg md:text-xl shadow-md') : 'border-dashed border-sky-400 bg-white/70 text-sky-600/70 hover:bg-white'}`}
-                                        >
-                                            {diagram.solvent ? diagram.solvent.value : <span className="text-[10px] md:text-xs">溶媒(g)</span>}
+                                                ${diagram.solvent ? (diagram.solvent.type === 'x' ? 'bg-yellow-300 border-yellow-400 text-yellow-800 text-sm' : 'bg-violet-50 border-violet-400 text-violet-700 text-sm shadow-md') : 'border-dashed border-violet-400 bg-white/70 text-violet-500 hover:bg-white'}
+                                                ${isCorrect && diagram.solvent.type !== 'x' ? 'opacity-80' : ''}`}>
+                                            {diagram.solvent ? diagram.solvent.value : <span className="text-[9px]">溶媒(g)</span>}
                                         </div>
-
-                                        {/* 溶質の枠 (中央の丸) */}
-                                        <div 
-                                            onDragOver={handleDragOver}
-                                            onDrop={(e) => handleDropToDiagram(e, 'solute')}
-                                            onClick={() => handleZoneClick('solute')}
-                                            className={`absolute w-16 h-16 md:w-20 md:h-20 rounded-full border-4 flex items-center justify-center font-bold cursor-pointer transition-all z-20 shadow-lg
+                                        {/* 溶質 (Rose) */}
+                                        <div onDragOver={handleDragOver} onDrop={(e) => handleDropToDiagram(e, 'solute')} onClick={() => handleZoneClick('solute')}
+                                            className={`absolute w-12 h-12 md:w-14 md:h-14 rounded-full border-4 flex items-center justify-center font-bold cursor-pointer transition-all z-20 shadow-lg
                                                 ${selectedBlockId && !diagram.solute ? 'ring-4 ring-orange-300 ring-opacity-50 animate-pulse' : ''}
-                                                ${diagram.solute ? (diagram.solute.type === 'x' ? 'bg-yellow-300 border-yellow-400 text-yellow-800 text-xl md:text-2xl' : 'bg-white border-sky-400 text-sky-700 text-xl md:text-2xl') : 'border-dashed border-gray-400 bg-white hover:bg-gray-50 text-gray-500'}`}
-                                        >
-                                            {diagram.solute ? diagram.solute.value : <span className="text-[10px] md:text-xs">溶質(g)</span>}
+                                                ${diagram.solute ? (diagram.solute.type === 'x' ? 'bg-yellow-300 border-yellow-400 text-yellow-800 text-base' : 'bg-rose-50 border-rose-400 text-rose-700 text-base shadow-md') : 'border-dashed border-rose-300 bg-white hover:bg-rose-50 text-rose-400'}
+                                                ${isCorrect && diagram.solute.type !== 'x' ? 'opacity-80' : ''}`}>
+                                            {diagram.solute ? diagram.solute.value : <span className="text-[9px]">溶質(g)</span>}
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* 3. 溶液 (下部の括弧) */}
-                                {/* ビーカーの外側に完全に独立して配置し、被りを解消 */}
-                                <div className="mt-1 md:mt-2 w-full flex flex-col items-center">
-                                    <svg viewBox="0 0 200 20" className="text-slate-500 w-[200px] md:w-[240px] h-[20px] md:h-[24px]">
+                                {/* 3. 溶液 (Emerald) */}
+                                <div className="mt-2 w-full flex flex-col items-center">
+                                    <svg viewBox="0 0 200 20" className="text-slate-500 w-[140px] md:w-[150px] h-[16px] md:h-[18px]">
                                         <path d="M 0,0 Q 0,20 100,20 Q 200,20 200,0" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                                     </svg>
-                                    <div 
-                                        onDragOver={handleDragOver}
-                                        onDrop={(e) => handleDropToDiagram(e, 'solution')}
-                                        onClick={() => handleZoneClick('solution')}
-                                        className={`mt-1 w-20 h-12 md:w-24 md:h-14 rounded-xl border-4 flex flex-col items-center justify-center font-bold cursor-pointer transition-all
+                                    <div onDragOver={handleDragOver} onDrop={(e) => handleDropToDiagram(e, 'solution')} onClick={() => handleZoneClick('solution')}
+                                        className={`mt-1 w-12 h-10 md:w-14 md:h-12 rounded-xl border-4 flex flex-col items-center justify-center font-bold cursor-pointer transition-all
                                             ${selectedBlockId && !diagram.solution ? 'ring-4 ring-orange-300 ring-opacity-50 animate-pulse' : ''}
-                                            ${diagram.solution ? (diagram.solution.type === 'x' ? 'bg-yellow-300 border-yellow-400 text-yellow-800 text-lg md:text-xl' : 'bg-white border-sky-400 text-sky-700 text-lg md:text-xl shadow-md') : 'border-dashed border-gray-300 bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
-                                    >
-                                        {diagram.solution ? diagram.solution.value : <span className="text-[10px] md:text-xs">溶液(g)</span>}
+                                            ${diagram.solution ? (diagram.solution.type === 'x' ? 'bg-yellow-300 border-yellow-400 text-yellow-800 text-sm' : 'bg-emerald-50 border-emerald-400 text-emerald-700 text-sm shadow-md') : 'border-dashed border-emerald-300 bg-white text-emerald-400 hover:bg-emerald-50'}
+                                            ${isCorrect && diagram.solution.type !== 'x' ? 'opacity-80' : ''}`}>
+                                        {diagram.solution ? diagram.solution.value : <span className="text-[10px]">溶液(g)</span>}
                                     </div>
                                 </div>
-
                             </div>
                         </div>
 
-                        {/* 完成した図から方程式を作ろう */}
-                        <div className="bg-white p-5 md:p-6 rounded-2xl shadow-xl border border-gray-100 flex-grow">
-                            <h3 className="text-center font-bold text-gray-500 text-sm mb-4">完成した図から方程式を作ろう</h3>
+                        <div className="bg-white p-4 md:p-5 rounded-2xl shadow-xl border border-gray-100">
+                            <h3 className="text-center font-bold text-gray-500 text-xs md:text-sm mb-3">完成した図から方程式を作ろう</h3>
                             
-                            {/* 方程式の表示 */}
-                            <div className="flex items-center justify-center space-x-2 md:space-x-4 text-xl md:text-3xl font-bold text-gray-700 mb-6 font-mono">
+                            <div className="flex items-center justify-center space-x-2 md:space-x-4 text-lg md:text-2xl font-bold text-gray-700 mb-4 font-mono">
                                 <div className="flex flex-col items-center">
-                                    <span className={`px-4 py-1 border-b-2 border-gray-800 min-w-[3rem] text-center ${!diagram.solute ? 'text-gray-300' : diagram.solute.type === 'x' ? 'text-orange-500' : 'text-sky-600'}`}>
-                                        {diagram.solute ? diagram.solute.value : '?'}
+                                    <span className={`px-2 md:px-3 py-1 border-b-2 border-gray-800 min-w-[3.5rem] md:min-w-[4.5rem] flex items-center justify-center ${!diagram.solute ? 'text-rose-400 text-xs md:text-sm' : diagram.solute.type === 'x' ? 'text-yellow-600' : 'text-rose-600'}`}>
+                                        {diagram.solute ? diagram.solute.value : '溶質'}
                                     </span>
-                                    <span className={`px-4 py-1 min-w-[3rem] text-center ${!diagram.solution ? 'text-gray-300' : diagram.solution.type === 'x' ? 'text-orange-500' : 'text-sky-600'}`}>
-                                        {diagram.solution ? diagram.solution.value : '?'}
+                                    <span className={`px-2 md:px-3 py-1 min-w-[3.5rem] md:min-w-[4.5rem] flex items-center justify-center ${!diagram.solution ? 'text-emerald-400 text-xs md:text-sm' : diagram.solution.type === 'x' ? 'text-yellow-600' : 'text-emerald-600'}`}>
+                                        {diagram.solution ? diagram.solution.value : '溶液'}
                                     </span>
                                 </div>
                                 <span className="text-gray-400">×</span>
                                 <span>100</span>
                                 <span className="text-gray-400">=</span>
-                                <span className={`px-4 py-2 border-2 border-gray-200 bg-gray-50 rounded-xl min-w-[4rem] text-center ${!diagram.percent ? 'text-gray-300' : diagram.percent.type === 'x' ? 'text-orange-500' : 'text-sky-600'}`}>
-                                    {diagram.percent ? diagram.percent.value : '?'}
+                                <span className={`px-2 py-1 md:py-2 border-2 border-gray-200 bg-gray-50 rounded-xl min-w-[3.5rem] md:min-w-[5rem] flex items-center justify-center ${!diagram.percent ? 'text-blue-400 text-[10px] md:text-xs' : diagram.percent.type === 'x' ? 'text-yellow-600' : 'text-blue-600'}`}>
+                                    {diagram.percent ? diagram.percent.value : '％濃度'}
                                 </span>
                             </div>
 
-                            <hr className="border-gray-100 mb-5" />
+                            <hr className="border-gray-100 mb-4" />
 
-                            {/* 解答入力と判定ボタン */}
-                            <div className="flex flex-col items-center gap-4">
-                                <div className="flex items-center gap-3 bg-sky-50 p-4 rounded-2xl border border-sky-100 w-full max-w-sm justify-center">
-                                    <span className="text-2xl font-bold italic text-orange-600 font-serif">x = </span>
-                                    <input 
-                                        type="number" 
-                                        value={userXValue}
-                                        onChange={(e) => setUserXValue(e.target.value)}
-                                        disabled={isCorrect}
-                                        placeholder="答えを入力"
-                                        // 幅をしっかり確保し、文字が見切れないように修正
-                                        className="w-44 px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 text-xl text-center font-bold transition-all shadow-inner disabled:bg-gray-200 disabled:text-gray-500"
-                                    />
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="flex items-center gap-2 bg-sky-50 p-3 rounded-2xl border border-sky-100 w-full max-w-xs justify-center">
+                                    <span className="text-xl font-bold italic text-orange-600 font-serif">x = </span>
+                                    <input type="number" value={userXValue} onChange={(e) => setUserXValue(e.target.value)} disabled={isCorrect} placeholder="答えを入力"
+                                        className="w-32 md:w-36 px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 text-lg text-center font-bold transition-all shadow-inner disabled:bg-gray-200 disabled:text-gray-500" />
                                 </div>
                                 
                                 {!isCorrect ? (
-                                    <button 
-                                        onClick={checkAnswer}
-                                        className="w-full max-w-sm py-4 rounded-full bg-green-500 text-white font-bold text-xl shadow-[0_4px_0_rgb(21,128,61)] hover:bg-green-400 hover:shadow-[0_2px_0_rgb(21,128,61)] hover:translate-y-[2px] transition-all active:shadow-none active:translate-y-[4px]"
-                                    >
+                                    <button onClick={checkAnswer} className="w-full max-w-xs py-3 rounded-full bg-green-500 text-white font-bold text-lg shadow-[0_4px_0_rgb(21,128,61)] hover:bg-green-400 hover:shadow-[0_2px_0_rgb(21,128,61)] hover:translate-y-[2px] transition-all active:shadow-none active:translate-y-[4px]">
                                         答える！
                                     </button>
                                 ) : (
-                                    <button 
-                                        onClick={() => {
-                                            if (problemIndex < 9) {
-                                                setProblemIndex(prev => prev + 1);
-                                            } else if (level < 4) {
-                                                setLevel(prev => prev + 1);
-                                                setProblemIndex(0);
-                                            } else {
-                                                setLevel(1);
-                                                setProblemIndex(0);
-                                            }
+                                    <button onClick={() => {
+                                            if (problemIndex < 9) { setProblemIndex(prev => prev + 1); }
+                                            else if (level < 4) { setLevel(prev => prev + 1); setProblemIndex(0); }
+                                            else { setLevel(1); setProblemIndex(0); }
                                         }}
-                                        className="w-full max-w-sm py-4 rounded-full bg-blue-500 text-white font-bold text-xl shadow-[0_4px_0_rgb(37,99,235)] hover:bg-blue-400 hover:shadow-[0_2px_0_rgb(37,99,235)] hover:translate-y-[2px] transition-all active:shadow-none active:translate-y-[4px] animate-pulse"
-                                    >
+                                        className="w-full max-w-xs py-3 rounded-full bg-blue-500 text-white font-bold text-lg shadow-[0_4px_0_rgb(37,99,235)] hover:bg-blue-400 hover:shadow-[0_2px_0_rgb(37,99,235)] hover:translate-y-[2px] transition-all active:shadow-none active:translate-y-[4px] animate-pulse">
                                         {problemIndex < 9 ? '次の問題へ！' : (level < 4 ? 'レベルクリア！次のレベルへ' : '全問クリア！最初に戻る')}
                                     </button>
                                 )}
                             </div>
 
-                            {/* フィードバック表示 */}
                             {feedback && (
-                                <div className={`mt-5 p-4 rounded-xl text-center font-bold text-lg animate-[bounce_0.5s_ease-in-out_1] 
+                                <div className={`mt-3 p-3 rounded-xl text-center font-bold text-sm md:text-base animate-[bounce_0.5s_ease-in-out_1] 
                                     ${feedback.type === 'success' ? 'bg-green-100 text-green-700 border-2 border-green-400' : 'bg-red-100 text-red-700 border-2 border-red-300'}`}>
                                     {feedback.message}
                                 </div>
@@ -499,8 +418,292 @@
             );
         }
 
+        // ====== モード2: 図を使わず考える (NonVisualMode) ======
+        
+        function NonVisualMode({ onBackToStart }) {
+            const [selectedLevel, setSelectedLevel] = useState(null);
+            
+            if (!selectedLevel) {
+                return (
+                    <div className="w-full max-w-4xl mx-auto flex flex-col bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 md:mt-10">
+                        <TopBar onBackToStart={onBackToStart} />
+                        <div className="p-8 flex flex-col items-center">
+                            <h2 className="text-2xl font-bold text-gray-700 mb-2">出題範囲を選んでください</h2>
+                            <p className="text-gray-500 font-bold mb-8">レベル1〜4は練習モード。ランダムは<span className="text-red-500">1ミスでゲームオーバー</span>のサバイバルです。</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-xl">
+                                {[1, 2, 3, 4].map(l => (
+                                    <button key={l} onClick={() => setSelectedLevel(l)}
+                                        className="p-6 rounded-2xl bg-sky-50 border-2 border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-all font-bold text-sky-800 text-xl shadow-sm">
+                                        レベル {l}
+                                    </button>
+                                ))}
+                                <button onClick={() => setSelectedLevel('random')}
+                                    className="p-6 rounded-2xl bg-orange-50 border-2 border-orange-200 hover:bg-orange-100 hover:border-orange-300 transition-all font-bold text-orange-800 text-xl md:col-span-2 shadow-sm flex flex-col items-center">
+                                    <span>ランダム 10問（サバイバル）</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return <QuizRunner level={selectedLevel} onBack={() => setSelectedLevel(null)} onBackToStart={onBackToStart} />;
+        }
+
+        function QuizRunner({ level, onBack, onBackToStart }) {
+            const isRandom = level === 'random';
+            const [questions, setQuestions] = useState([]);
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [userAnswer, setUserAnswer] = useState('');
+            const [status, setStatus] = useState('idle'); // 'idle' | 'correct' | 'wrong'
+            const [isSurvivalGameOver, setIsSurvivalGameOver] = useState(false); // ランダムモード用
+            const [score, setScore] = useState(0);
+            const [isFinished, setIsFinished] = useState(false);
+
+            // 問題セットの初期化
+            useEffect(() => {
+                if (isRandom) {
+                    // 全問題からランダムに10問抽出
+                    let allProblems = [];
+                    [1, 2, 3, 4].forEach(l => {
+                        allProblems = allProblems.concat(PROBLEMS_DB[l].map(p => ({...p, originalLevel: l})));
+                    });
+                    const shuffled = allProblems.sort(() => 0.5 - Math.random()).slice(0, 10);
+                    setQuestions(shuffled);
+                } else {
+                    // 選択されたレベルの10問
+                    setQuestions(PROBLEMS_DB[level].map(p => ({...p, originalLevel: level})));
+                }
+                setCurrentIndex(0);
+                resetTurn();
+                setScore(0);
+                setIsFinished(false);
+                setIsSurvivalGameOver(false);
+            }, [level]);
+
+            const resetTurn = () => {
+                setUserAnswer('');
+                setStatus('idle');
+            };
+
+            const currentProblem = questions[currentIndex];
+
+            // 正解の取得
+            const getExpectedX = (problem) => {
+                if (!problem) return 0;
+                const ol = problem.originalLevel;
+                if (ol === 1) return problem.percent;
+                if (ol === 2) return problem.solute;
+                if (ol === 3) return problem.solution;
+                if (ol === 4) return problem.solvent;
+                return 0;
+            };
+
+            const handleCheck = () => {
+                if (!currentProblem || userAnswer === '') return;
+                
+                const expectedX = getExpectedX(currentProblem);
+
+                if (parseInt(userAnswer, 10) === expectedX) {
+                    setStatus('correct');
+                    setScore(prev => prev + 1);
+                } else {
+                    if (isRandom) {
+                        // ランダムモードは即ゲームオーバー
+                        setIsSurvivalGameOver(true);
+                    } else {
+                        // 通常モードは間違えても解説へ
+                        setStatus('wrong');
+                    }
+                }
+            };
+
+            const handleNext = () => {
+                if (currentIndex < questions.length - 1) {
+                    setCurrentIndex(prev => prev + 1);
+                    resetTurn();
+                } else {
+                    setIsFinished(true);
+                }
+            };
+
+            if (!currentProblem) return null;
+
+            // --- サバイバルモードのゲームオーバー画面 ---
+            if (isSurvivalGameOver) {
+                const expectedX = getExpectedX(currentProblem);
+                return (
+                    <div className="w-full max-w-4xl mx-auto flex flex-col bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 md:mt-10">
+                        <div className="p-3 md:p-5 bg-red-600 text-white flex justify-center items-center">
+                            <h1 className="text-lg md:text-xl font-bold tracking-wider">ゲームオーバー</h1>
+                        </div>
+                        <div className="p-6 md:p-8 flex flex-col items-center justify-center">
+                            <div className="text-6xl mb-4">💥</div>
+                            <h2 className="text-2xl font-bold text-red-600 mb-6">残念！不正解です</h2>
+                            
+                            <div className="w-full text-left mb-6 max-w-2xl">
+                                <h3 className="font-bold text-gray-700 mb-2">間違えた問題：</h3>
+                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-gray-800 font-medium mb-4 leading-relaxed">
+                                    {currentProblem.text}
+                                </div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="font-bold text-red-500">あなたの答え：{userAnswer}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className="font-bold text-green-600">正解：{expectedX}</span>
+                                </div>
+                                <Explanation data={currentProblem} level={currentProblem.originalLevel} />
+                            </div>
+
+                            <button onClick={onBack} className="px-8 py-3 bg-gray-200 text-gray-800 font-bold rounded-xl hover:bg-gray-300 transition-colors shadow-sm">
+                                モード選択へ戻る
+                            </button>
+                        </div>
+                    </div>
+                )
+            }
+
+            // --- 結果画面（レベル1〜4の終了時） ---
+            if (isFinished) {
+                const isPerfect = score === 10;
+                return (
+                    <div className="w-full max-w-4xl mx-auto flex flex-col bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 md:mt-10">
+                        <div className="p-3 md:p-5 bg-sky-600 text-white flex justify-center items-center">
+                            <h1 className="text-lg md:text-xl font-bold tracking-wider">レベル {level} 結果発表</h1>
+                        </div>
+                        <div className="p-8 md:p-12 flex flex-col items-center justify-center text-center">
+                            {isPerfect ? (
+                                <div className="mb-6 animate-[bounce_1s_ease-in-out_infinite]">
+                                    <div className="text-6xl md:text-7xl mb-2">🌟🏆🌟</div>
+                                    <h2 className="text-3xl md:text-4xl font-bold text-yellow-500">パーフェクト！！</h2>
+                                    <p className="text-gray-600 mt-2 font-bold text-lg">全問正解！素晴らしい！</p>
+                                </div>
+                            ) : (
+                                <div className="mb-6">
+                                    <div className="text-5xl md:text-6xl mb-2">👏</div>
+                                    <h2 className="text-2xl md:text-3xl font-bold text-sky-600">おつかれさま！</h2>
+                                </div>
+                            )}
+
+                            <div className="text-3xl md:text-4xl font-bold text-gray-800 mb-8 border-b-4 border-sky-200 pb-4">
+                                10問中 <span className={isPerfect ? "text-red-500 text-5xl md:text-6xl mx-2" : "text-sky-600 text-5xl md:text-6xl mx-2"}>{score}</span> 問正解
+                            </div>
+
+                            <button onClick={onBack} className="px-10 py-4 bg-sky-500 text-white font-bold text-xl rounded-full shadow-[0_4px_0_rgb(2,132,199)] hover:bg-sky-400 hover:shadow-[0_2px_0_rgb(2,132,199)] hover:translate-y-[2px] transition-all active:shadow-none active:translate-y-[4px]">
+                                モード選択へ戻る
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // --- 通常の問題画面 ---
+            return (
+                <div className="w-full max-w-4xl mx-auto flex flex-col bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 md:mt-10">
+                     <div className="p-3 md:p-5 bg-sky-600 text-white flex justify-between items-center">
+                        <h1 className="text-lg md:text-xl font-bold tracking-wider">
+                            {isRandom ? 'サバイバル 10問' : `レベル ${level} 挑戦中`}
+                        </h1>
+                        <button onClick={onBack} className="text-sm bg-white text-sky-600 px-3 py-1 rounded-full font-bold hover:bg-sky-50">
+                            やめる
+                        </button>
+                    </div>
+
+                    <div className="p-6 md:p-8 flex flex-col">
+                        <div className="text-sky-600 font-bold mb-2">
+                            第 {currentIndex + 1} 問 / 10問 
+                            {isRandom && <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">Lv.{currentProblem.originalLevel} 相当</span>}
+                        </div>
+                        
+                        <div className="bg-sky-50 p-6 rounded-2xl mb-6 shadow-inner border border-sky-100 text-xl leading-relaxed font-medium">
+                            {currentProblem.text}
+                        </div>
+
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="flex items-center gap-3">
+                                <span className="font-bold text-gray-600">答え：</span>
+                                <input type="number" value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} disabled={status !== 'idle'} placeholder="数字を入力"
+                                    className="w-40 px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200 text-xl text-center font-bold transition-all disabled:bg-gray-100" />
+                            </div>
+
+                            {status === 'idle' ? (
+                                <button onClick={handleCheck} className="w-full max-w-xs py-3 mt-2 rounded-full bg-sky-500 text-white font-bold text-lg shadow-[0_4px_0_rgb(2,132,199)] hover:bg-sky-400 hover:shadow-[0_2px_0_rgb(2,132,199)] hover:translate-y-[2px] transition-all active:shadow-none active:translate-y-[4px]">
+                                    答える！
+                                </button>
+                            ) : (
+                                <div className="w-full flex flex-col items-center animate-fade-in mt-2">
+                                    {status === 'correct' ? (
+                                        <div className="text-2xl font-bold text-green-600 mb-2 flex items-center gap-2">
+                                            <span>🎉</span> 正解！
+                                        </div>
+                                    ) : (
+                                        <div className="text-xl md:text-2xl font-bold text-red-500 mb-2 flex flex-col items-center gap-2">
+                                            <div className="flex items-center gap-2"><span>❌</span> 不正解…</div>
+                                            <div className="text-base md:text-lg text-gray-700 font-medium">正解は <span className="text-red-600 font-extrabold text-2xl">{getExpectedX(currentProblem)}</span> です</div>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="w-full max-w-lg mb-6">
+                                        <Explanation data={currentProblem} level={currentProblem.originalLevel} />
+                                    </div>
+
+                                    <button onClick={handleNext} className="w-full max-w-xs py-3 rounded-full bg-blue-500 text-white font-bold text-lg shadow-[0_4px_0_rgb(37,99,235)] hover:bg-blue-400 hover:shadow-[0_2px_0_rgb(37,99,235)] hover:translate-y-[2px] transition-all active:shadow-none active:translate-y-[4px]">
+                                        {currentIndex < 9 ? '次の問題へ' : '結果を見る'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ====== メインアプリ (画面切り替え管理) ======
+        
+        function App() {
+            // 'start', 'visual', 'non-visual'
+            const [screen, setScreen] = useState('start');
+
+            if (screen === 'start') {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4">
+                        <div className="bg-white p-8 md:p-12 rounded-3xl shadow-2xl max-w-2xl w-full text-center border-t-8 border-sky-500">
+                            <h1 className="text-3xl md:text-5xl font-bold text-sky-800 mb-4">パーセント濃度マスター</h1>
+                            <p className="text-gray-600 mb-10 text-lg">自分に合った解き方を選ぼう！</p>
+                            
+                            <div className="flex flex-col md:flex-row gap-6 justify-center">
+                                <button onClick={() => setScreen('visual')}
+                                    className="flex-1 flex flex-col items-center p-6 bg-blue-50 border-2 border-blue-200 rounded-2xl hover:bg-blue-100 hover:border-blue-400 hover:-translate-y-1 transition-all shadow-md group">
+                                    <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">🧪</div>
+                                    <div className="text-xl font-bold text-blue-800 mb-2">図で考える</div>
+                                    <p className="text-sm text-blue-600">ビーカーの図に数字を当てはめて、<br/>方程式の作り方をマスターしよう！</p>
+                                </button>
+                                
+                                <button onClick={() => setScreen('non-visual')}
+                                    className="flex-1 flex flex-col items-center p-6 bg-orange-50 border-2 border-orange-200 rounded-2xl hover:bg-orange-100 hover:border-orange-400 hover:-translate-y-1 transition-all shadow-md group">
+                                    <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">📝</div>
+                                    <div className="text-xl font-bold text-orange-800 mb-2">図を使わず考える</div>
+                                    <p className="text-sm text-orange-600">図なしで計算にチャレンジ！<br/>ランダム10問サバイバルもあるよ。</p>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (screen === 'visual') {
+                return <VisualMode onBackToStart={() => setScreen('start')} />;
+            }
+
+            if (screen === 'non-visual') {
+                return <NonVisualMode onBackToStart={() => setScreen('start')} />;
+            }
+
+            return null;
+        }
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<MassPercentApp />);
+        root.render(<App />);
     </script>
 </body>
 </html>
